@@ -27,12 +27,17 @@ from pydantic import BaseModel, Field
 
 from backend.database import DATA_DIR, ROOT, add_audit, database, init_db, parse_json, utc_now
 from backend.services.dataset_export import write_yolo_seg_bundle
+from backend.services.field_photos import IMPORT_HINT, load_subset, public_subset, resolve_file
 from backend.services.reporting import build_pdf, canonical_json, sha256_report_data
 from backend.services.rules_engine import DEFAULT_RULES, evaluate_onion, summarize_onions, validate_rules
 from ml.inference.pipeline import ENGINE_NAME, MODEL_VERSION, ImageQualityError, analyze_image
 
 FRONTEND_DIR = ROOT / "frontend"
 DEMO_IMAGE = FRONTEND_DIR / "assets" / "onion-demo.png"
+# Optional third-party field photos imported by data/demo/import_zenodo_onions.py (CC BY 4.0).
+# The local import stays out of git; a committed subset under frontend/assets ships to hosted demos.
+FIELD_PHOTO_DIR = Path(os.environ.get("PYAaZSCAN_FIELD_PHOTOS", str(ROOT / "data" / "demo" / "zenodo")))
+FIELD_PHOTO_FALLBACK_DIR = FRONTEND_DIR / "assets" / "field-photos"
 MAX_UPLOAD = int(os.environ.get("PYAaZSCAN_MAX_UPLOAD_BYTES", str(12 * 1024 * 1024)))
 SUPPORTED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
 ALLOWED_LABELS = {"healthy", "damaged", "rotten", "sprouted", "undersized"}
@@ -86,6 +91,12 @@ class DatasetAnnotationBody(BaseModel):
     lot_id: str = ""
     procurement_centre: str = ""
     objects: list[AnnotationObjectBody] = Field(default_factory=list, max_length=100)
+
+
+def _field_photos() -> dict[str, Any]:
+    """Load the first usable field-photo subset: configured path, local import, then shipped subset."""
+    subsets = [load_subset(candidate) for candidate in (FIELD_PHOTO_DIR, FIELD_PHOTO_FALLBACK_DIR)]
+    return next((item for item in subsets if item["status"] == "ready"), subsets[0])
 
 
 def _clean_text(value: str | None, fallback: str, limit: int = 120) -> str:
@@ -192,6 +203,7 @@ def dashboard() -> dict[str, Any]:
     total_onions = sum(item["sample_size"] for item in items)
     grade_values = [item["percentages"].get("grade_a", 0) for item in items if item["sample_size"]]
     manual_values = [item["percentages"].get("manual_review", 0) for item in items if item["sample_size"]]
+    field_subset = _field_photos()
     return {
         "today_inspections": len(today_items),
         "total_inspections": len(items),
@@ -202,6 +214,11 @@ def dashboard() -> dict[str, Any]:
         "audit_events": audit,
         "recent_inspections": items[:8],
         "grade_a_trend": [{"lot_id": item["lot_id"], "percentage": item["percentages"].get("grade_a", 0)} for item in items[:7]][::-1],
+        "field_photos": {
+            "status": field_subset["status"],
+            "count": len(field_subset["images"]),
+            "licence": (field_subset.get("source") or {}).get("licence"),
+        },
     }
 
 
@@ -245,9 +262,28 @@ def inspection_image(inspection_id: str) -> FileResponse:
     return FileResponse(row["image_path"], filename=row["file_name"], media_type="image/jpeg" if Path(row["image_path"]).suffix.lower() in {".jpg", ".jpeg"} else None)
 
 
-async def _scan(file: UploadFile, lot_id: str | None, procurement_centre: str | None, operator: str | None) -> dict[str, Any]:
+async def _scan(
+    file: UploadFile,
+    lot_id: str | None,
+    procurement_centre: str | None,
+    operator: str | None,
+    provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     raw = await file.read(MAX_UPLOAD + 1)
-    safe_name, width, height = _validate_image_upload(raw, file.filename or "inspection-image")
+    return _inspect_bytes(raw, file.filename or "inspection-image", lot_id, procurement_centre, operator, provenance=provenance)
+
+
+def _inspect_bytes(
+    raw: bytes,
+    filename: str,
+    lot_id: str | None,
+    procurement_centre: str | None,
+    operator: str | None,
+    *,
+    provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Assess image bytes, then persist one inspection record with its rules snapshot."""
+    safe_name, width, height = _validate_image_upload(raw, filename or "inspection-image")
     rules = _read_active_rules()
     try:
         visual = analyze_image(raw, rules)
@@ -300,6 +336,7 @@ async def _scan(file: UploadFile, lot_id: str | None, procurement_centre: str | 
         "warnings": visual["warnings"],
         "status": "complete",
         "external_visual_assessment_only": True,
+        "provenance": provenance or {"source": "operator_upload"},
     }
     with Image.open(io.BytesIO(raw)) as decoded_image:
         suffix = SUPPORTED_FORMATS.get(decoded_image.format or "JPEG", ".jpg")
@@ -319,7 +356,7 @@ async def _scan(file: UploadFile, lot_id: str | None, procurement_centre: str | 
             )
             db.execute("INSERT INTO images(id,inspection_id,file_name,image_path,sha256,width,height,created_at) VALUES(?,?,?,?,?,?,?,?)", (f"IMG-{uuid.uuid4().hex[:12].upper()}", inspection_id, safe_name, str(image_path), image_sha256, width, height, now))
             _insert_onion_rows(db, inspection_id, visual["onions"])
-            add_audit(db, "inspection", inspection_id, "inspection_created", user, {"lot_id": lot, "sample_size": result["sample_size"], "model_version": visual["model"]["version"], "rule_set_id": rules["rule_set_id"], "rule_version": rules["version"]})
+            add_audit(db, "inspection", inspection_id, "inspection_created", user, {"lot_id": lot, "sample_size": result["sample_size"], "model_version": visual["model"]["version"], "rule_set_id": rules["rule_set_id"], "rule_version": rules["version"], "provenance": result["provenance"]})
     except Exception:
         image_path.unlink(missing_ok=True)
         raise
@@ -565,13 +602,11 @@ def dataset_overview() -> dict[str, Any]:
     }
 
 
-@app.post("/api/dataset/images")
-async def upload_dataset_image(file: UploadFile = File(...), label: str = Form(...)) -> dict[str, Any]:
+def _import_dataset_image(raw: bytes, filename: str, label: str, *, source: str = "operator_upload") -> dict[str, Any]:
     label = label.strip().lower()
     if label not in ALLOWED_LABELS:
         raise HTTPException(status_code=422, detail=f"Label must be one of: {', '.join(sorted(ALLOWED_LABELS))}.")
-    raw = await file.read(MAX_UPLOAD + 1)
-    safe_name, _, _ = _validate_image_upload(raw, file.filename or "dataset-image")
+    safe_name, _, _ = _validate_image_upload(raw, filename or "dataset-image")
     image_id = uuid.uuid4().hex
     with Image.open(io.BytesIO(raw)) as decoded_image:
         suffix = SUPPORTED_FORMATS.get(decoded_image.format or "JPEG", ".jpg")
@@ -580,12 +615,18 @@ async def upload_dataset_image(file: UploadFile = File(...), label: str = Form(.
     now = utc_now()
     try:
         with database() as db:
-            db.execute("INSERT INTO dataset_images(id,file_name,image_path,label,split,lot_id,procurement_centre,source,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (image_id, safe_name, str(destination), label, "unassigned", "", "", "operator_upload", now))
-            add_audit(db, "dataset_image", image_id, "image_labelled", "Dataset annotator", {"label": label, "file_name": safe_name})
+            db.execute("INSERT INTO dataset_images(id,file_name,image_path,label,split,lot_id,procurement_centre,source,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (image_id, safe_name, str(destination), label, "unassigned", "", "", source, now))
+            add_audit(db, "dataset_image", image_id, "image_labelled", "Dataset annotator", {"label": label, "file_name": safe_name, "source": source})
     except Exception:
         destination.unlink(missing_ok=True)
         raise
-    return {"id": image_id, "file_name": safe_name, "label": label, "created_at": now, "image_url": f"/api/dataset/images/{image_id}/image", "message": "Image saved. Draw each onion polygon and assign one or more visible labels in the annotation studio."}
+    return {"id": image_id, "file_name": safe_name, "label": label, "source": source, "created_at": now, "image_url": f"/api/dataset/images/{image_id}/image", "message": "Image saved. Draw each onion polygon and assign one or more visible labels in the annotation studio."}
+
+
+@app.post("/api/dataset/images")
+async def upload_dataset_image(file: UploadFile = File(...), label: str = Form(...)) -> dict[str, Any]:
+    raw = await file.read(MAX_UPLOAD + 1)
+    return _import_dataset_image(raw, file.filename or "dataset-image", label)
 
 
 @app.get("/api/dataset/images/{image_id}")
@@ -910,6 +951,7 @@ def generate_report(request: Request, body: dict[str, Any]) -> dict[str, Any]:
             "rules": inspection.get("rules", parse_json(row["rule_snapshot_json"], {})),
             "model": inspection.get("model", {"version": row["model_version"], "engine": ENGINE_NAME}),
             "warnings": inspection.get("warnings", []),
+            "provenance": inspection.get("provenance") or {"source": "operator_upload"},
         }
         report_data = {"schema_version": "1.0", "report_id": report_id, "generated_at": generated_at, "verification_url": verification_url, "inspection": report_inspection}
         report_hash = sha256_report_data(report_data)
@@ -1001,6 +1043,105 @@ def demo_image() -> FileResponse:
     if not DEMO_IMAGE.is_file():
         raise HTTPException(status_code=404, detail="Synthetic demo fixture is not available.")
     return FileResponse(DEMO_IMAGE, filename="pyaazscan-synthetic-demo.png", media_type="image/png")
+
+
+@app.get("/api/demo/field-photos")
+def field_photo_gallery() -> dict[str, Any]:
+    """Describe the optional, locally imported field-photo subset and its licence."""
+    payload = public_subset(_field_photos())
+    payload["synthetic_fixture_url"] = "/demo/onion-lot.png"
+    return payload
+
+
+@app.get("/api/demo/field-photos/{photo_id}/image")
+def field_photo_image(photo_id: str, variant: str = "full") -> FileResponse:
+    subset = _field_photos()
+    if subset["status"] != "ready":
+        raise HTTPException(status_code=409, detail=f"{subset['message']} {IMPORT_HINT}")
+    path = resolve_file(subset["root"], subset, photo_id, variant=variant)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Field photograph not found in the imported subset.")
+    media_type = "image/png" if path.suffix.lower() == ".png" else "image/webp" if path.suffix.lower() == ".webp" else "image/jpeg"
+    return FileResponse(path, filename=path.name, media_type=media_type, content_disposition_type="inline")
+
+
+@app.post("/api/demo/field-photos/{photo_id}/scan")
+def field_photo_scan(
+    photo_id: str,
+    lot_id: str | None = Form(default=None),
+    procurement_centre: str | None = Form(default=None),
+    operator: str | None = Form(default=None),
+) -> dict[str, Any]:
+    """Run the same inspection path as an uploaded photo, on one subset image."""
+    subset = _field_photos()
+    if subset["status"] != "ready":
+        raise HTTPException(status_code=409, detail=f"{subset['message']} {IMPORT_HINT}")
+    entry = next((item for item in subset["images"] if item["id"] == photo_id), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Field photograph not found in the imported subset.")
+    path = resolve_file(subset["root"], subset, photo_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Field photograph file is missing on disk; re-import the subset.")
+    source = subset.get("source") or {}
+    provenance = {
+        "source": "zenodo_subset",
+        "dataset": source.get("title"),
+        "record_id": source.get("record_id"),
+        "doi": source.get("doi"),
+        "url": source.get("url"),
+        "licence": source.get("licence"),
+        "attribution": subset.get("attribution"),
+        "source_path": entry.get("source_path"),
+        "image_sha256": entry.get("sha256"),
+        "subset_generated_at": subset.get("generated_at"),
+        "coarse_class": {"part": entry.get("part"), "variety": entry.get("variety"), "health": entry.get("health"), "arrangement": entry.get("arrangement")},
+        "note": "Publisher's coarse market class only; no onion-level labels, lot identity, sampling design or calibration reference.",
+    }
+    return _inspect_bytes(path.read_bytes(), f"{photo_id}.jpg", lot_id, procurement_centre or "Zenodo 20254934 · Pune market photos", operator, provenance=provenance)
+
+
+class FieldPhotoImportBody(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+    limit: int | None = Field(default=None, ge=1, le=100)
+    label: str | None = None
+
+
+@app.post("/api/demo/field-photos/to-dataset")
+def field_photos_to_dataset(body: FieldPhotoImportBody) -> dict[str, Any]:
+    """Copy subset photographs into the annotation queue. The image-level label is the publisher's
+    coarse class carried over as curation metadata, not an instance annotation."""
+    subset = _field_photos()
+    if subset["status"] != "ready":
+        raise HTTPException(status_code=409, detail=f"{subset['message']} {IMPORT_HINT}")
+    by_id = {item["id"]: item for item in subset["images"]}
+    requested = body.ids or list(by_id)
+    unknown = [photo_id for photo_id in requested if photo_id not in by_id]
+    if unknown:
+        raise HTTPException(status_code=404, detail=f"Unknown field photo id(s): {', '.join(unknown[:5])}.")
+    chosen = requested[: body.limit or len(requested)]
+    imported: list[dict[str, Any]] = []
+    failed: list[dict[str, str]] = []
+    for photo_id in chosen:
+        entry = by_id[photo_id]
+        path = resolve_file(subset["root"], subset, photo_id)
+        if path is None:
+            failed.append({"id": photo_id, "reason": "file missing on disk"})
+            continue
+        label = (body.label or entry.get("dataset_label_suggestion") or "healthy").strip().lower()
+        try:
+            record = _import_dataset_image(path.read_bytes(), f"{photo_id}.jpg", label, source="zenodo_subset")
+        except HTTPException as exc:
+            failed.append({"id": photo_id, "reason": str(exc.detail)})
+            continue
+        imported.append({"id": photo_id, "dataset_image_id": record["id"], "label": record["label"]})
+    return {
+        "imported": len(imported),
+        "images": imported,
+        "failed": failed,
+        "licence": (subset.get("source") or {}).get("licence"),
+        "attribution": subset.get("attribution"),
+        "message": f"{len(imported)} photograph(s) added to the annotation queue. Polygons and per-onion labels are still required.",
+    }
 
 
 # Mount the UI last so API routes keep precedence and the preview is same-origin.
