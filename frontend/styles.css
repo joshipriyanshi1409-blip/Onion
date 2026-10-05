@@ -550,3 +550,26 @@ tbody tr.clickable:hover { background:#f8faf6; }
   .modal-report-body img { order:-1; }
 }
 @media (prefers-reduced-motion:reduce) { *,*:before,*:after { animation-duration:.01ms !important;animation-iteration-count:1 !important;scroll-behavior:auto !important;transition-duration:.01ms !important; } }
+
+/* ---------- Optional field-photo subset (data/demo/import_zenodo_onions.py) ---------- */
+.field-photo-card { margin-top:14px; }
+.photo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(178px,1fr)); gap:11px; margin-top:13px; }
+.photo-tile { border:1px solid var(--line); border-radius:11px; background:#fff; overflow:hidden; display:flex; flex-direction:column; transition:box-shadow .16s,transform .16s; }
+.photo-tile:hover { box-shadow:var(--shadow-sm); transform:translateY(-1px); }
+.photo-tile-image { display:block; width:100%; border:0; padding:0; background:#f1f4f0; aspect-ratio:4/3; }
+.photo-tile-image img { width:100%; height:100%; object-fit:cover; display:block; }
+.photo-tile-body { padding:9px 10px 10px; display:flex; flex-direction:column; gap:5px; }
+.photo-tile-title { display:flex; justify-content:space-between; align-items:baseline; gap:7px; font-size:9.5px; color:#2c4436; font-weight:740; }
+.photo-tile-title span { color:#8b978e; font-weight:640; text-transform:uppercase; letter-spacing:.05em; font-size:8px; }
+.photo-tile-class { font-size:8px; text-transform:uppercase; letter-spacing:.07em; color:#8b978e; font-weight:700; }
+.photo-tile-note { font-size:8px; color:#9aa59c; line-height:1.5; }
+.photo-tile-actions { display:flex; gap:6px; margin-top:3px; }
+.photo-tile-actions .btn { flex:1; min-height:27px; padding:0 7px; font-size:9px; }
+.photo-tile-actions .btn svg { width:12px; height:12px; }
+.photo-grid-foot { display:flex; flex-wrap:wrap; gap:9px; align-items:center; justify-content:space-between; margin-top:13px; padding-top:11px; border-top:1px dashed var(--line-strong); font-size:8.5px; color:#8b978e; line-height:1.6; }
+.photo-grid-foot > span { max-width:74ch; }
+.photo-grid-foot em { color:#67766c; font-style:normal; }
+.photo-command { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
+.photo-command code,.photo-tile code { background:#fff; border:1px solid #ebe5d8; border-radius:6px; padding:5px 7px; font-size:8.5px; color:#5d5341; overflow-x:auto; white-space:nowrap; }
+.notice a { text-decoration:underline; font-weight:720; }
+@media (max-width:700px) { .photo-grid { grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); } }

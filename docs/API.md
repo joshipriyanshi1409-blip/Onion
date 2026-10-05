@@ -24,6 +24,21 @@ The FastAPI OpenAPI schema at `/openapi.json` is the source of endpoint request/
 
 Allowed decisions are `GRADE_A`, `URS`, and `REJECT`. The previous decision, reviewer, note and timestamp are retained in the inspection payload and audit tables.
 
+## Field-photo subset (optional)
+
+These endpoints describe a subset created locally by `data/demo/import_zenodo_onions.py`; the git tree contains no photographs from the source pack.
+
+- `GET /api/demo/field-photos` returns `status` (`ready`, `missing`, `invalid` or `empty`), a human `message`, the import command as `import_hint`, licence/attribution/source metadata from the manifest, per-class selection counts, and the photo list (`id`, pixel size, coarse class, `image_url`, `thumbnail_url`, suggested image-level curation label).
+- `GET /api/demo/field-photos/{photo_id}/image` serves original bytes inline; `?variant=thumb` returns the generated grid thumbnail. Identifiers must appear in the manifest and every path resolves inside the subset directory, so traversal outside it is rejected.
+- `POST /api/demo/field-photos/{photo_id}/scan` accepts the same optional `lot_id`, `procurement_centre` and `operator` fields as a normal scan and returns an ordinary inspection record. It stores `provenance` (dataset title, DOI, licence, attribution, archive-relative `source_path`, image SHA-256 and the publisher's coarse class) in the inspection payload and the audit event.
+- `POST /api/demo/field-photos/to-dataset` accepts JSON `{ "ids": [...], "limit": n, "label": "healthy" }` and copies selected photographs into the annotation queue with `source = "zenodo_subset"`. Omitted `ids` means all; `limit` caps the batch; `label` overrides the carried-over curation label.
+
+`POST /api/reports/generate` copies `provenance` into the canonical report snapshot, so the licence attribution is covered by the report-data hash, and the PDF prints an “Image source and licence” line whenever the image came from a third-party pack.
+
+Without an imported subset the first endpoint still answers (`status: "missing"`) and the photo endpoints return `409` with the import command. A `404` means the id is not in the manifest.
+
+The coarse class is the publisher's statement about a whole photograph. It is not an onion-level label, not a defect observation and not an evaluation result.
+
 ## Polygon dataset curation and export
 
 `POST /api/dataset/images` accepts multipart `file` and an initial image-level `label`. It creates an unassigned source image; this label is separate from per-onion segmentation labels. `GET /api/dataset` returns uploaded-record counts and the curation queue. `GET /api/dataset/images/{image_id}` returns EXIF-oriented pixel dimensions, the latest annotation, lot/split provenance and up to ten recent revision summaries. `GET /api/dataset/images/{image_id}/image` serves the source pixels inline.

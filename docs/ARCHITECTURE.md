@@ -56,6 +56,8 @@ flowchart LR
 | `backend/database.py` | SQLite schema, short-lived connections, runtime path and transaction helpers. |
 | `backend/services/reporting.py` | Canonicalize report data, calculate SHA-256 and generate the PDF/QR evidence files. |
 | `backend/services/dataset_export.py` | Convert reviewed polygon annotations to a lot-safe YOLO-seg archive while retaining the native multi-label manifest. |
+| `backend/services/field_photos.py` | Read an optional, locally imported third-party photo subset (manifest-validated, path-restricted) for demo inspection and annotation input. |
+| `data/demo/import_zenodo_onions.py` | Offline helper that copies a small attributed subset out of a published CC BY archive; never part of the request path. |
 | `training/` | Optional dataset validation, training, evaluation and model export scripts; training is launched as a guarded subprocess. |
 
 ## Inspection request flow
@@ -84,6 +86,7 @@ The report hash is over canonical JSON report data and includes the source-image
 - Reports: `POST /api/reports/generate`, `GET /api/reports`, `GET /api/reports/{id}`, `GET /api/reports/{id}/pdf`, `GET /api/reports/{id}/verify`, `GET /api/reports/{id}/qr`
 - Dataset: `/api/dataset`, `/api/dataset/images`, annotation revision, archive staging and YOLO-seg export endpoints
 - Models and training: `/api/models`, `/api/training/start`, `/api/training/{id}`
+- Optional field photos: `/api/demo/field-photos`, `/api/demo/field-photos/{id}/image`, `/api/demo/field-photos/{id}/scan`, `/api/demo/field-photos/to-dataset`
 
 See [`API.md`](API.md) for request/response details and validation behavior.
 

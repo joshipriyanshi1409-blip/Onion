@@ -7,6 +7,9 @@ __pycache__/
 
 # Runtime data, uploaded images, generated reports and local model weights
 /data/runtime/
+# Third-party field photos (imported by data/demo/import_zenodo_onions.py) and download cache
+/data/demo/zenodo/
+/data/cache/
 /data/datasets/
 /data/training-runs/
 /reports/generated/

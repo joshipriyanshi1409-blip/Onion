@@ -53,4 +53,26 @@ Export bundles are stored under the ignored runtime directory and can be downloa
 - Evaluate per-class segmentation and classification behavior, false negatives, calibration/uncertainty, and size error against calibrated measurements. Report only metrics from an actual, documented run on an appropriate held-out dataset.
 - Keep procurement rules configurable and separate from model labels. RGB imagery cannot reliably establish internal quality or legal grade.
 
+## 6. Importing a published photo pack (optional)
+
+[`Onion Image Dataset` (Zenodo 20254934)](https://zenodo.org/records/20254934) publishes 16,300 onion bulb and leaf photographs (CC BY 4.0). `data/demo/import_zenodo_onions.py` copies a small attributed subset to `data/demo/zenodo/` for demos and annotation practice:
+
+```bash
+python data/demo/import_zenodo_onions.py --zip "~/Downloads/Onion Image Dataset.zip" --dry-run   # inspect
+python data/demo/import_zenodo_onions.py --zip "~/Downloads/Onion Image Dataset.zip"              # import ~24 photos
+```
+
+What that gives you, and what it does not:
+
+- Real pixels with provenance: the manifest records the DOI, licence, the file's path inside the archive and its SHA-256, so any inspection record can name its source.
+- Only the publisher's coarse folder class (`red`/`white`, `healthy`/`unhealthy`, `single`/`multiple`). There are **no polygons**, no per-onion defect labels, no annotator, no measurement protocol and no quality adjudication.
+- No procurement lot, centre, date or cultivar record. Because near-duplicate frames from one market stall can sit in different folders, you cannot carve leakage-safe `train`/`validation`/`test` splits out of the folder tree alone. Assign lots yourself, or keep the subset out of any training claim.
+- No calibrated size reference in frame, so `undersized` stays unusable on these images (section 1, point 4).
+- Attribution is a licence condition, not a courtesy. Keep `ATTRIBUTION.md` next to the subset and reproduce the citation in any deck, export or report that shows the photos.
+
+Set `--output frontend/assets/field-photos` only when a deployment must ship the images; keep that subset to a few
+dozen photographs so the repository stays cloneable, and leave `ATTRIBUTION.md` beside it.
+
+Use it to demonstrate the annotation loop and to test image-quality behavior on real photographs. Treat every polygon drawn on an imported photo as a fresh annotation requiring the same review as one drawn on a self-collected image.
+
 The synthetic demo fixture is for software behavior only; it must not be mixed into field training or evaluation data.

@@ -211,6 +211,21 @@ def build_pdf(report_data: dict[str, Any], report_hash: str, verification_url: s
         evidence._restrictSize(174 * mm, 112 * mm)
         story.extend([evidence, Spacer(1, 6), Paragraph("Green = Grade A · Amber = URS · Red = Reject · Blue = Manual review. Boxes show detected regions, not certified grading boundaries.", styles["SmallMuted"])])
 
+    provenance = inspection.get("provenance") or {}
+    if provenance.get("source") and provenance["source"] != "operator_upload":
+        attribution = provenance.get("attribution") or " · ".join(
+            part for part in (provenance.get("dataset"), provenance.get("doi"), provenance.get("licence")) if part
+        )
+        story.append(Paragraph(
+            f"<b>Image source and licence:</b> {_escape(provenance.get('dataset') or 'third-party photograph')}"
+            f" · file {_escape(provenance.get('source_path') or 'not recorded')}"
+            f" · licence {_escape(provenance.get('licence') or 'see the source record')}."
+            f" Attribution as required by that licence: {_escape(attribution)}."
+            " The source's own class labels describe the published photograph, not this procurement lot.",
+            styles["SmallMuted"],
+        ))
+        story.append(Spacer(1, 8))
+
     story.extend([Paragraph("Rules, model, limitations and verification", styles["SectionHeading"])])
     rule_text = (
         f"Rule profile: {_escape(rules['rule_set_id'])} v{_escape(rules['version'])} — {_escape(rules['name'])}. "
