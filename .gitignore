@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+.DS_Store
+
+# Runtime data, uploaded images, generated reports and local model weights
+/data/runtime/
+/data/datasets/
+/data/training-runs/
+/reports/generated/
+/runs/
+*.sqlite3
+*.db
+*.pt
+*.onnx

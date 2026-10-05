@@ -1,0 +1,44 @@
+[
+  {
+    "title": "Quality Parameter of Produce — Onion",
+    "type": "Institutional reference",
+    "organization": "Small Farmers’ Agribusiness Consortium (SFAC), Government of India",
+    "url": "https://sfacindia.com/UploadFile/Statistics/Quality%20parameter%20of%20produce.pdf?var=9958569.25855",
+    "description": "A produce-quality reference that describes preferred onion diameter and visible selection/rejection characteristics. The 40–65 mm preference is treated here as a contextual reference, not as a universal tender specification."
+  },
+  {
+    "title": "Procedure for Grant of AGMARK — Grading of Onion for Export to the European Union",
+    "type": "Government/standards document (archival copy)",
+    "organization": "Directorate of Marketing & Inspection / APEDA; hosted by Tamil Nadu Agricultural University",
+    "url": "https://agritech.tnau.ac.in/amis/pdf/ONION_AGMARK.pdf",
+    "description": "An archival 2006 document describing AGMARK onion inspection and quality parameters for export. Confirm the current applicable rules with the relevant authority before procurement use."
+  },
+  {
+    "title": "Onions (Other Than Bermuda-Granex-Grano and Creole Type): Grades and Standards",
+    "type": "Official standard (United States; comparative reference)",
+    "organization": "USDA Agricultural Marketing Service",
+    "url": "https://www.ams.usda.gov/grades-standards/onions-other-bermuda-granex-grano-and-creole-type",
+    "description": "Official U.S. grade requirements and size provisions. Included for computer-vision feature context only; it is not an Indian procurement rule."
+  },
+  {
+    "title": "Onion Inspection Instructions",
+    "type": "Official inspection guidance (United States; comparative reference)",
+    "organization": "USDA Agricultural Marketing Service",
+    "url": "https://www.ams.usda.gov/sites/default/files/media/Onion_inspection_Instructions.pdf",
+    "description": "Inspection guidance discussing onion condition, defects, and size reporting. The document is jurisdiction-specific and is not applied by the default PYAazScan rules."
+  },
+  {
+    "title": "Preharvest production practices, and postharvest treatment and handling methods for best quality onion bulbs: review",
+    "type": "Research review",
+    "organization": "Review article indexed by ResearchGate",
+    "url": "https://www.researchgate.net/publication/358947892_Preharvest_production_practices_and_postharvest_treatment_and_handling_methods_for_best_quality_onion_bulbs_review",
+    "description": "Review of onion production and postharvest handling, including visible sprouting and decay as quality and storage concerns. Access to the full paper may depend on the publisher."
+  },
+  {
+    "title": "Onion image classification using CNN models",
+    "type": "Research paper",
+    "organization": "ICTACT Journal on Image and Video Processing",
+    "url": "https://ictactjournals.in/paper/IJIVP_Vol_16_Iss_3_Paper_7_3839_3847.pdf",
+    "description": "A recent image-classification study. Its reported results depend on its own dataset and protocol and are not measurements of PYAazScan."
+  }
+]

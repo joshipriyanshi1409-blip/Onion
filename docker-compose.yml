@@ -1,0 +1,11 @@
+services:
+  pyaazscan:
+    build: .
+    container_name: pyaazscan
+    ports:
+      - "8000:8000"
+    environment:
+      PYAaZSCAN_DATA_DIR: /app/data/runtime
+    volumes:
+      - ./data/runtime:/app/data/runtime
+    restart: unless-stopped
