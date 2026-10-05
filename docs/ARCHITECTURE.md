@@ -1,46 +1,92 @@
-# PYAazScan architecture
+# Architecture
 
-## Current MVP
+PYAazScan is a small **FastAPI modular monolith** with a static browser UI. The image pipeline extracts evidence; a separate policy module makes rule-profile decisions. This separation keeps visual heuristics from silently becoming procurement policy.
 
-```text
-Responsive browser UI (vanilla HTML/CSS/ES modules)
-    ├── photo upload / still camera capture / bundled demo fixture
-    ├── inspection map, explanations, rules, research and reports
-    ├── polygon annotation studio with revision/provenance controls
-    └── same-origin JSON API calls
-            ↓
-FastAPI modular monolith
-    ├── scan API → OpenCV/Pillow heuristic visual pipeline
-    ├── independent, editable procurement rules engine
-    ├── SQLite persistence + append-only audit events
-    ├── report snapshot → SHA-256 + QR → PDF
-    ├── image-level dataset staging + versioned polygon annotation API
-    ├── lot-aware YOLO-seg export, native multi-label manifest and optional training jobs
-    └── static frontend and demo asset serving
+## System view
+
+```mermaid
+flowchart LR
+    inspector([Inspector])
+
+    subgraph client[Browser · frontend/]
+        ui[Inspection UI<br/>scan · results · reports]
+        studio[Polygon annotation studio]
+    end
+
+    subgraph app[FastAPI application · backend/main.py]
+        routes[HTTP routes<br/>validation · orchestration]
+        cv[ml/inference/pipeline.py<br/>OpenCV · Pillow]
+        rules[backend/services/rules_engine.py<br/>versioned policy]
+        reporting[backend/services/reporting.py<br/>PDF · QR · canonical hash]
+        export[backend/services/dataset_export.py<br/>YOLO-seg bundle]
+        trainer[Optional training subprocess]
+    end
+
+    subgraph runtime[Runtime data]
+        database[(SQLite<br/>backend/database.py)]
+        evidence[(Images · PDFs · ZIP archives)]
+    end
+
+    inspector --> ui
+    inspector --> studio
+    ui -->|same-origin HTTP| routes
+    studio -->|same-origin HTTP| routes
+    routes -->|uploaded image| cv --> evidenceResult[Candidate onions<br/>measurements · cues]
+    evidenceResult --> rules -->|policy outcome| routes
+    routes <--> database
+    routes <--> evidence
+    routes --> reporting
+    reporting <--> database
+    reporting --> evidence
+    routes --> export
+    export <--> database
+    export <--> evidence
+    routes --> trainer
+    routes -->|inspection response| ui
 ```
 
-## Inference boundary
+## Module responsibilities
 
-`ml/inference/pipeline.py` returns image quality, candidate instance polygons/boxes, pixel dimensions, optional calibrated millimetres, and heuristic defect evidence. It does not assign grades. `backend/services/rules_engine.py` consumes those measurements/evidence and a snapshot of the currently selected rule profile. The deployed engine is `HSV-CONTOUR-DEMO-0.1`, a transparent classical-CV demo fallback; no trained model weights or evaluation metrics are present. The API and model registry expose this fact.
+| Module | Responsibility |
+|---|---|
+| `frontend/` | Vanilla HTML/CSS/JavaScript UI, camera still capture, inspection map, annotation studio and reports. Served at `/` by the FastAPI static mount. |
+| `backend/main.py` | FastAPI application, API routes, request validation and workflow orchestration. Static files are mounted last so API and demo routes take precedence. |
+| `ml/inference/pipeline.py` | Decode/normalize an image, issue quality cues, detect a possible 50 mm reference, and return heuristic onion candidates, polygons, measurements and visible-defect cues. It does not assign grades. |
+| `backend/services/rules_engine.py` | Apply the selected, validated rule profile to inference evidence; return Grade A, URS, Reject or Manual Review. |
+| `backend/database.py` | SQLite schema, short-lived connections, runtime path and transaction helpers. |
+| `backend/services/reporting.py` | Canonicalize report data, calculate SHA-256 and generate the PDF/QR evidence files. |
+| `backend/services/dataset_export.py` | Convert reviewed polygon annotations to a lot-safe YOLO-seg archive while retaining the native multi-label manifest. |
+| `training/` | Optional dataset validation, training, evaluation and model export scripts; training is launched as a guarded subprocess. |
 
-The optional 50 mm blue-square reference gives a scale estimate from its observed side length. Without it, millimetres remain `null` and the size rule abstains to manual review. This single-marker scale is a demo calibration aid, not metrology certification. A separate, operator-editable rules profile is stored in SQLite; past inspections retain their original rule snapshot.
+## Inspection request flow
 
-## Storage and audit
+1. The browser posts an uploaded photo or captured still frame to the same-origin scan endpoint.
+2. The API validates the file, records its original bytes and runs the visual pipeline.
+3. The rules engine evaluates the returned measurements and evidence against a copy of the active policy profile. When scale or evidence is insufficient, the engine can return Manual Review rather than invent a measurement.
+4. The API persists the inspection, per-onion results, source-image metadata and audit event; the browser receives the inspection summary and overlays.
+5. An officer can record a manual decision. Report generation snapshots the inspection and policy context, creates a PDF/QR, and records a canonical-data hash.
 
-SQLite is the local MVP database. It stores operator records, procurement centres, lots, inspections, original image metadata and SHA-256, per-onion decisions, defect evidence, measurements, active and historical rule versions, human overrides, reports, image-level dataset labels, versioned polygon annotations with annotator/status, lot/split metadata, exported archive records, training jobs, model versions and audit events. Uploaded images and generated PDFs live under `PYAaZSCAN_DATA_DIR` (default `data/runtime`), outside version control. A report's SHA-256 is over canonical JSON report data (including a source-image SHA-256); verification compares the snapshot and current source-image bytes. QR verification resolves to a same-origin report page. This is tamper-evident integrity checking, not blockchain or external trusted timestamping.
+The active engine is `HSV-CONTOUR-DEMO-0.1`, a classical-CV fallback. Heuristic scores are not calibrated probabilities; there are no bundled trained weights or evaluation metrics. The 50 mm blue square provides a demo scale estimate only and is not certified metrology.
 
-## API
+## Persistence and integrity
 
-- `POST /api/scan/image`, `POST /api/scan/camera`
-- `GET /api/inspection/{id}`, `GET /api/inspections`, `GET /api/dashboard`
-- `GET /api/rules`, `POST /api/rules`
-- `POST /api/manual-review`
-- `POST /api/reports/generate`, `GET /api/reports`, `GET /api/reports/{id}`, `GET /api/reports/{id}/pdf`, `GET /api/reports/{id}/verify`
-- `GET /api/models`, `GET /api/research/sources`, `GET /api/dataset`
-- `POST /api/dataset/images`, `GET /api/dataset/images/{id}`, `GET /api/dataset/images/{id}/image`
-- `PUT /api/dataset/images/{id}/annotations`, `POST /api/dataset/export`, `GET /api/dataset/exports/{id}`
-- `POST /api/dataset/upload`, `POST /api/training/start`, `GET /api/training/{id}`
+SQLite is the local MVP database. It stores inspections, onion decisions, defect evidence, measurements, active and historical policy versions, human overrides, reports, dataset images/annotations, exports, training jobs and audit events. Uploaded images, generated reports, staged archives and exports are written under `PYAaZSCAN_DATA_DIR`.
 
-## Boundaries and next steps
+- Local default: `data/runtime/` (ignored by Git).
+- Vercel default: `/tmp/pyaazscan-runtime/` because the deployed project directory is read-only. `/tmp` is temporary and per-instance; it is not durable or shared storage.
 
-The browser capture mode takes a still image and reuses the upload endpoint. The default backend is one FastAPI process and SQLite, with no cloud requirement. For a production system, add authentication/roles, managed PostgreSQL and migrations, encrypted/retained image storage, signed report manifests and trusted timestamps, formal rule approval, an independently validated trained instance-segmentation model, and a reviewed offline ONNX/TFLite runtime. None of those production controls are claimed by this demo.
+The report hash is over canonical JSON report data and includes the source-image SHA-256. Verification compares the saved report snapshot and current image bytes. It does not sign PDF bytes or provide a third-party timestamp, and QR verification is served by the same application.
+
+## API groups
+
+- Inspection: `POST /api/scan/image`, `POST /api/scan/camera`, `GET /api/inspections`, `GET /api/inspection/{id}`, `GET /api/dashboard`
+- Policy and review: `GET/POST /api/rules`, `POST /api/manual-review`, `GET /api/audit/{inspection_id}`
+- Reports: `POST /api/reports/generate`, `GET /api/reports`, `GET /api/reports/{id}`, `GET /api/reports/{id}/pdf`, `GET /api/reports/{id}/verify`, `GET /api/reports/{id}/qr`
+- Dataset: `/api/dataset`, `/api/dataset/images`, annotation revision, archive staging and YOLO-seg export endpoints
+- Models and training: `/api/models`, `/api/training/start`, `/api/training/{id}`
+
+See [`API.md`](API.md) for request/response details and validation behavior.
+
+## Deployment boundaries
+
+Local development and Docker run one FastAPI process that serves both the UI and API. Vercel uses `backend.main:app` as its FastAPI entrypoint; the frontend is served through the static mount, while API calls remain same-origin. The Vercel setup is for demos: local SQLite and file writes use ephemeral `/tmp` storage, serverless instances are not a durable/shared database, and dataset ZIP uploads or long-running training are poor fits. A persistent hosted deployment needs managed database and object storage, plus authentication, retention controls and production-grade access/security review.
