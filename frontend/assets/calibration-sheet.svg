@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="148mm" height="210mm" viewBox="0 0 560 794">
+  <rect width="560" height="794" fill="#ffffff"/>
+  <rect x="42" y="38" width="476" height="718" rx="12" fill="#ffffff" stroke="#dfe7df" stroke-width="2"/>
+  <g font-family="Arial, sans-serif" fill="#173e32">
+    <text x="72" y="98" font-size="18" font-weight="700" letter-spacing="3">PYAazScan</text>
+    <text x="72" y="129" font-size="11" font-weight="700" letter-spacing="2" fill="#b87534">ONION QUALITY SCAN</text>
+    <text x="72" y="188" font-size="12" font-weight="700" letter-spacing="1.5">50 mm calibration reference</text>
+    <text x="72" y="211" font-size="10" fill="#748278">Print at 100% / actual size. Verify the square with a ruler.</text>
+    <text x="72" y="273" font-size="9" font-weight="700" letter-spacing="1.5" fill="#748278">PLACE THE FLAT REFERENCE IN THE SAME PLANE AS THE BULBS</text>
+  </g>
+  <rect x="176" y="322" width="189" height="189" fill="#1f68ed"/>
+  <rect x="196" y="342" width="149" height="149" fill="none" stroke="#f4f7f4" stroke-width="8"/>
+  <g stroke="#597360" stroke-width="2" fill="none">
+    <path d="M176 535v11m0-5h189m0-6v11"/>
+  </g>
+  <g font-family="Arial, sans-serif" fill="#506456" text-anchor="middle">
+    <text x="270.5" y="571" font-size="12" font-weight="700">50.0 mm side</text>
+    <text x="280" y="631" font-size="10">Keep the phone nearly perpendicular.</text>
+    <text x="280" y="650" font-size="10">Avoid glare, shadow and perspective tilt.</text>
+  </g>
+  <rect x="77" y="689" width="406" height="1" fill="#e5ebe4"/>
+  <text x="280" y="718" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#78867b">One-marker scale is an estimate, not certified metrology.</text>
+</svg>
