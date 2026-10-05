@@ -131,7 +131,7 @@ See [`docs/DATA_COLLECTION.md`](docs/DATA_COLLECTION.md), [`docs/MODEL_CARD.md`]
 
 ## Vercel deployment
 
-The repository is configured to expose `backend.main:app` through the Vercel FastAPI runtime (`pyproject.toml`). Import the repository with the **project root set to the repository root**. Vercel can install dependencies from `requirements.txt`; no separate frontend build command is needed because the app serves the `frontend/` static mount.
+The repository is configured to expose `backend.main:app` through the Vercel FastAPI runtime (`[tool.vercel]` in `pyproject.toml`), which also declares every runtime dependency — Vercel prefers `pyproject.toml` over `requirements.txt` when both exist, and `uv.lock` pins the exact versions it installs. `vercel.json` keeps tests, docs and demo generators out of the serverless bundle. Import the repository with the **project root set to the repository root**, not `frontend/`. For Docker and local development, `requirements.txt` mirrors the runtime dependency set and adds the test tools. No separate frontend build command is needed because the app serves the `frontend/` static mount.
 
 This is suitable for a lightweight demo, **not durable record keeping**. On Vercel, the app uses `/tmp/pyaazscan-runtime` because the project filesystem is read-only; `/tmp` is temporary and can differ between instances. Inspections, uploads and reports can be lost. Dataset ZIP uploads and the optional training subprocess are not suited to this serverless deployment. For persistent use, replace SQLite/files with managed database and object storage, and account for the platform's request-size and execution-time limits.
 
