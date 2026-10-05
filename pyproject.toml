@@ -1,0 +1,3 @@
+[tool.vercel]
+# The FastAPI app lives in a package module rather than a default root entrypoint.
+entrypoint = "backend.main:app"

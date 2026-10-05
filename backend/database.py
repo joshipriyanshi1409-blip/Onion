@@ -17,7 +17,27 @@ try:
 except ImportError:
     pass
 
-DATA_DIR = Path(os.environ.get("PYAaZSCAN_DATA_DIR", ROOT / "data" / "runtime")).resolve()
+def _default_data_dir() -> Path:
+    # Vercel's project directory is read-only at runtime. /tmp is writable, but
+    # ephemeral; hosted deployments need managed storage for durable records.
+    if os.environ.get("VERCEL"):
+        return Path("/tmp") / "pyaazscan-runtime"
+    return ROOT / "data" / "runtime"
+
+
+def _runtime_data_dir() -> Path:
+    configured = os.environ.get("PYAaZSCAN_DATA_DIR")
+    if os.environ.get("VERCEL"):
+        # A relative path resolves into Vercel's read-only project directory.
+        # Only honor an explicit absolute path on Vercel (for example, /tmp/...)
+        # and otherwise keep runtime writes on the writable ephemeral volume.
+        if configured and Path(configured).is_absolute():
+            return Path(configured)
+        return _default_data_dir()
+    return Path(configured) if configured else _default_data_dir()
+
+
+DATA_DIR = _runtime_data_dir().resolve()
 DB_PATH = DATA_DIR / "pyaazscan.sqlite3"
 
 
